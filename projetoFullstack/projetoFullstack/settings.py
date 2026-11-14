@@ -11,7 +11,11 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+import certifi
+from dotenv import load_dotenv
 
+load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -37,6 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     # Bibliotecas instaladas
     'rest_framework',
     'corsheaders',
@@ -79,8 +84,17 @@ WSGI_APPLICATION = 'projetoFullstack.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.environ.get('TIDB_NAME', 'fluxo_finance'),
+        'USER': os.environ.get('TIDB_USER'),
+        'PASSWORD': os.environ.get('TIDB_PASSWORD'),
+        'HOST': os.environ.get('TIDB_HOST'),
+        'PORT': os.environ.get('TIDB_PORT', '4000'),
+        'OPTIONS': {
+            'ssl': {
+                'ca': certifi.where(),
+            },
+        },
     }
 }
 
