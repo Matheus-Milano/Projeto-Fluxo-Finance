@@ -1,369 +1,462 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
-import './App.css'
+import { useState, useEffect } from 'react';
+import axios from 'axios';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
+} from 'recharts';
+import {
+  Wallet, TrendingUp, PiggyBank, Calendar, PlusCircle, Trash2,
+  ChevronLeft, ChevronRight, LogOut, Sparkles, ShieldCheck
+} from 'lucide-react';
+import './App.css';
 
-const BASE_URL = 'https://fluxo-finance-api.onrender.com/api'
-const API_TRANSACOES = `${BASE_URL}/transacoes/`
+const BASE_URL = 'https://fluxo-finance-api.onrender.com/api';
 
-function App() {
-  // Estados de Autenticação
-  const [token, setToken] = useState(localStorage.getItem('token') || '')
-  const [nomeUsuario, setNomeUsuario] = useState(localStorage.getItem('nomeUsuario') || '')
-  const [modoCadastro, setModoCadastro] = useState(false)
-  const [nome, setNome] = useState('')
-  const [email, setEmail] = useState('')
-  const [senha, setSenha] = useState('')
-  const [erroAuth, setErroAuth] = useState('')
+export default function App() {
+  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [nomeUsuario, setNomeUsuario] = useState(localStorage.getItem('nomeUsuario') || '');
+  const [isRegister, setIsRegister] = useState(false);
 
-  // Estados do Fluxo Finance
-  const [abaAtiva, setAbaAtiva] = useState('grafico') // 'grafico' | 'salario' | 'fixa' | 'alheia'
-  const [transacoes, setTransacoes] = useState([])
-  const [descricao, setDescricao] = useState('')
-  const [valor, setValor] = useState('')
-  const [dataTransacao, setDataTransacao] = useState(
-    new Date().toISOString().slice(0, 10)
-  )
-  const [idEditando, setIdEditando] = useState(null)
+  // Estados de Auth
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [erroAuth, setErroAuth] = useState('');
 
-  // Configura o cabeçalho Authorization sempre que o token mudar
+  // Estados do Dashboard
+  const [abaAtiva, setAbaAtiva] = useState('painel'); // 'painel' | 'investimentos'
+  const [mesAtual, setMesAtual] = useState('2026-11');
+  const [resumo, setResumo] = useState({
+    salario: 0,
+    total_fixas: 0,
+    total_variaveis: 0,
+    sobra_mes: 0,
+    total_guardado: 0,
+    historico: []
+  });
+  const [transacoes, setTransacoes] = useState([]);
+  const [novoSalario, setNovoSalario] = useState('');
+  const [editandoSalario, setEditandoSalario] = useState(false);
+
+  // Formulário Nova Despesa
+  const [descricao, setDescricao] = useState('');
+  const [valor, setValor] = useState('');
+  const [tipo, setTipo] = useState('VARIAVEL');
+
+  // Investimentos (API Banco Central)
+  const [dadosInvestimentos, setDadosInvestimentos] = useState(null);
+
+  const authHeaders = { headers: { Authorization: `Token ${token}` } };
+
+  // Navegar entre meses (YYYY-MM)
+  const mudarMes = (direcao) => {
+    const [ano, mes] = mesAtual.split('-').map(Number);
+    const data = new Date(ano, mes - 1 + direcao, 1);
+    const novoAno = data.getFullYear();
+    const novoMes = String(data.getMonth() + 1).padStart(2, '0');
+    setMesAtual(`${novoAno}-${novoMes}`);
+  };
+
+  const carregarDados = async () => {
+    if (!token) return;
+    try {
+      const [resResumo, resTransacoes] = await Promise.all([
+        axios.get(`${BASE_URL}/resumo/?mes=${mesAtual}`, authHeaders),
+        axios.get(`${BASE_URL}/transacoes/?mes=${mesAtual}`, authHeaders)
+      ]);
+      setResumo(resResumo.data);
+      setNovoSalario(resResumo.data.salario);
+      setTransacoes(resTransacoes.data);
+    } catch (err) {
+      if (err.response?.status === 401) sair();
+    }
+  };
+
+  const carregarInvestimentos = async () => {
+    try {
+      const res = await axios.get(`${BASE_URL}/investimentos/`);
+      setDadosInvestimentos(res.data);
+    } catch (err) {
+      console.error('Erro ao buscar investimentos', err);
+    }
+  };
+
   useEffect(() => {
     if (token) {
-      axios.defaults.headers.common['Authorization'] = `Token ${token}`
-      carregarTransacoes()
-    } else {
-      delete axios.defaults.headers.common['Authorization']
+      carregarDados();
+      carregarInvestimentos();
     }
-  }, [token])
+  }, [token, mesAtual]);
 
-  const carregarTransacoes = async () => {
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setErroAuth('');
     try {
-      const resposta = await axios.get(API_TRANSACOES)
-      setTransacoes(resposta.data)
-    } catch (error) {
-      console.error('Erro ao carregar transações:', error)
-      if (error.response && error.response.status === 401) {
-        sairDaConta()
-      }
+      const rota = isRegister ? 'register' : 'login';
+      const payload = isRegister ? { nome, email, password } : { email, password };
+      const res = await axios.post(`${BASE_URL}/${rota}/`, payload);
+      localStorage.setItem('token', res.data.token);
+      localStorage.setItem('nomeUsuario', res.data.nome || email.split('@')[0]);
+      setToken(res.data.token);
+      setNomeUsuario(res.data.nome || email.split('@')[0]);
+    } catch (err) {
+      setErroAuth(err.response?.data?.error || 'Erro ao conectar com o servidor.');
     }
-  }
+  };
 
-  async function handleAuth(e) {
-    e.preventDefault()
-    setErroAuth('')
+  const sair = () => {
+    localStorage.clear();
+    setToken('');
+  };
 
-    const endpoint = modoCadastro ? `${BASE_URL}/register/` : `${BASE_URL}/login/`
-    const payload = modoCadastro ? { nome, email, senha } : { email, senha }
+  const salvarSalario = async (e) => {
+    e.preventDefault();
+    await axios.post(`${BASE_URL}/perfil/salario/`, { salario_mensal: novoSalario }, authHeaders);
+    setEditandoSalario(false);
+    carregarDados();
+  };
 
-    try {
-      const res = await axios.post(endpoint, payload)
-      localStorage.setItem('token', res.data.token)
-      localStorage.setItem('nomeUsuario', res.data.nome || '')
-      setToken(res.data.token)
-      setNomeUsuario(res.data.nome || '')
-      setNome('')
-      setEmail('')
-      setSenha('')
-    } catch (error) {
-      setErroAuth(error.response?.data?.erro || 'Erro ao conectar com o servidor.')
-    }
-  }
+  const adicionarDespesa = async (e) => {
+    e.preventDefault();
+    if (!descricao || !valor) return;
+    await axios.post(
+      `${BASE_URL}/transacoes/`,
+      { descricao, valor: parseFloat(valor), tipo, mes_referencia: mesAtual },
+      authHeaders
+    );
+    setDescricao('');
+    setValor('');
+    carregarDados();
+  };
 
-  function sairDaConta() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('nomeUsuario')
-    setToken('')
-    setNomeUsuario('')
-    setTransacoes([])
-    setAbaAtiva('grafico')
-  }
+  const removerDespesa = async (id) => {
+    await axios.delete(`${BASE_URL}/transacoes/${id}/`, authHeaders);
+    carregarDados();
+  };
 
-  function trocarAba(novaAba) {
-    setAbaAtiva(novaAba)
-    setDescricao('')
-    setValor('')
-    setIdEditando(null)
-  }
+  const formatarMoeda = (v) =>
+    Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-  function iniciarEdicao(transacao) {
-    setIdEditando(transacao.id)
-    setDescricao(transacao.descricao)
-    setValor(transacao.valor)
-    setDataTransacao(transacao.data_transacao.slice(0, 10))
-  }
-
-  function salvarTransacao(novaTransacao) {
-    axios
-      .post(API_TRANSACOES, novaTransacao)
-      .then(() => {
-        setDescricao('')
-        setValor('')
-        carregarTransacoes()
-      })
-      .catch((error) => {
-        console.error('Erro ao salvar transação:', error)
-      })
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    const novaTransacao = {
-      descricao,
-      valor: parseFloat(valor),
-      tipo: abaAtiva,
-      data_transacao: new Date(`${dataTransacao}T12:00:00`).toISOString(),
-    }
-
-    if (idEditando) {
-      axios
-        .put(`${API_TRANSACOES}${idEditando}/`, novaTransacao)
-        .then(() => {
-          setDescricao('')
-          setValor('')
-          setIdEditando(null)
-          carregarTransacoes()
-        })
-        .catch((error) => {
-          console.error('Erro ao atualizar transação:', error)
-        })
-    } else {
-      salvarTransacao(novaTransacao)
-    }
-  }
-
-  // SE NÃO ESTIVER LOGADO: Mostra a tela de Login / Cadastro
+  // --- TELA DE LOGIN / CADASTRO ---
   if (!token) {
     return (
-      <div className="container">
-        <h1>Fluxo Finance</h1>
-
-        <main className="painel-principal" style={{ maxWidth: '400px', margin: '0 auto' }}>
-          <h2 className="titulo-aba">
-            {modoCadastro ? 'Criar Nova Conta' : 'Acessar Minha Conta'}
-          </h2>
-
-          <form className="formulario" onSubmit={handleAuth}>
-            {modoCadastro && (
-              <input
-                type="text"
-                placeholder="Seu Nome"
-                required
-                value={nome}
-                onChange={(e) => setNome(e.target.value)}
-              />
-            )}
+      <div className="auth-wrapper">
+        <h1 className="brand-title">Fluxo Finance</h1>
+        <form className="glass-card auth-box" onSubmit={handleAuth}>
+          <h2>{isRegister ? 'Criar Conta Futurista' : 'Acessar Minha Conta'}</h2>
+          {isRegister && (
             <input
-              type="email"
-              placeholder="Seu E-mail"
+              className="glass-input"
+              placeholder="Seu Nome"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
               required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
             />
-            <input
-              type="password"
-              placeholder="Sua Senha"
-              required
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-            />
-
-            {erroAuth && (
-              <p style={{ color: '#f87171', fontSize: '0.9rem', margin: '4px 0' }}>
-                {erroAuth}
-              </p>
-            )}
-
-            <button type="submit">
-              {modoCadastro ? 'Cadastrar e Entrar' : 'Entrar'}
-            </button>
-          </form>
-
-          <p style={{ marginTop: '16px', fontSize: '0.9rem', color: '#94a3b8' }}>
-            {modoCadastro ? 'Já tem uma conta?' : 'Ainda não tem conta?'}{' '}
+          )}
+          <input
+            className="glass-input"
+            type="email"
+            placeholder="Seu E-mail"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            className="glass-input"
+            type="password"
+            placeholder="Sua Senha"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          {erroAuth && <p style={{ color: '#f87171', textAlign: 'center', marginBottom: 12 }}>{erroAuth}</p>}
+          <button className="btn-primary" type="submit">
+            {isRegister ? 'Cadastrar e Entrar' : 'Entrar'}
+          </button>
+          <p style={{ textAlign: 'center', marginTop: 18, color: '#94a3b8', fontSize: '0.9rem' }}>
+            {isRegister ? 'Já tem uma conta?' : 'Ainda não tem conta?'}{' '}
             <span
-              onClick={() => {
-                setModoCadastro(!modoCadastro)
-                setErroAuth('')
-              }}
-              style={{ color: '#38bdf8', cursor: 'pointer', fontWeight: 'bold' }}
+              style={{ color: '#c084fc', cursor: 'pointer', fontWeight: 600 }}
+              onClick={() => setIsRegister(!isRegister)}
             >
-              {modoCadastro ? 'Fazer Login' : 'Criar Conta'}
+              {isRegister ? 'Fazer Login' : 'Criar Conta'}
             </span>
           </p>
-        </main>
+        </form>
       </div>
-    )
+    );
   }
 
-  // SE ESTIVER LOGADO: Mostra o painel normal do usuário
-  const totalSalario = transacoes
-    .filter((t) => t.tipo === 'salario')
-    .reduce((acc, t) => acc + parseFloat(t.valor), 0)
-
-  const totalFixas = transacoes
-    .filter((t) => t.tipo === 'fixa')
-    .reduce((acc, t) => acc + parseFloat(t.valor), 0)
-
-  const totalAlheias = transacoes
-    .filter((t) => t.tipo === 'alheia')
-    .reduce((acc, t) => acc + parseFloat(t.valor), 0)
-
-  const saldoLivre = Math.max(totalSalario - totalFixas - totalAlheias, 0)
-
-  const base = totalSalario > 0 ? totalSalario : 1
-  const grausFixas = Math.min((totalFixas / base) * 360, 360)
-  const grausAlheias = Math.min((totalAlheias / base) * 360, 360 - grausFixas)
-
-  const estiloPizza = {
-    background:
-      totalSalario === 0
-        ? '#1e293b'
-        : `conic-gradient(
-            #f87171 0deg ${grausFixas}deg,
-            #facc15 ${grausFixas}deg ${grausFixas + grausAlheias}deg,
-            #4ade80 ${grausFixas + grausAlheias}deg 360deg
-          )`,
-  }
-
-  const titulosAba = {
-    salario: 'Adicionar Salário / Renda',
-    fixa: 'Adicionar Despesa Fixa (Água, Luz, Aluguel...)',
-    alheia: 'Adicionar Despesa Alheia / Supérflua',
-  }
-
-  const transacoesFiltradas = transacoes.filter((t) => t.tipo === abaAtiva)
-
+  // --- DASHBOARD PRINCIPAL ---
   return (
-    <div className="container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-        <span style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
-          Olá, <strong>{nomeUsuario || 'Usuário'}</strong>
-        </span>
-        <button
-          onClick={sairDaConta}
-          style={{
-            background: 'transparent',
-            border: '1px solid #475569',
-            color: '#cbd5e1',
-            padding: '6px 14px',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
-        >
-          Sair
-        </button>
-      </div>
+    <div className="dashboard-container">
+      {/* Barra Superior */}
+      <header className="topbar">
+        <div>
+          <h1 className="brand-title" style={{ marginBottom: 4, fontSize: '1.8rem' }}>
+            Fluxo Finance
+          </h1>
+          <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>
+            Olá, <strong>{nomeUsuario}</strong> • Controle Inteligente
+          </p>
+        </div>
 
-      <h1>Fluxo Finance</h1>
+        <div className="nav-tabs">
+          <button
+            className={`btn-glass ${abaAtiva === 'painel' ? 'active' : ''}`}
+            onClick={() => setAbaAtiva('painel')}
+          >
+            <Wallet size={18} /> Meu Painel
+          </button>
+          <button
+            className={`btn-glass ${abaAtiva === 'investimentos' ? 'active' : ''}`}
+            onClick={() => setAbaAtiva('investimentos')}
+          >
+            <TrendingUp size={18} /> Melhores Investimentos
+          </button>
+          <button className="btn-glass" onClick={sair} title="Sair">
+            <LogOut size={18} />
+          </button>
+        </div>
+      </header>
 
-      <nav className="menu-topo">
-        <button
-          className={abaAtiva === 'grafico' ? 'ativo' : ''}
-          onClick={() => trocarAba('grafico')}
-        >
-          Gráfico Geral
-        </button>
-        <button
-          className={abaAtiva === 'salario' ? 'ativo' : ''}
-          onClick={() => trocarAba('salario')}
-        >
-          + Salário
-        </button>
-        <button
-          className={abaAtiva === 'fixa' ? 'ativo' : ''}
-          onClick={() => trocarAba('fixa')}
-        >
-          + Despesa Fixa
-        </button>
-        <button
-          className={abaAtiva === 'alheia' ? 'ativo' : ''}
-          onClick={() => trocarAba('alheia')}
-        >
-          + Despesa Alheia
-        </button>
-      </nav>
-
-      <main className="painel-principal">
-        {abaAtiva === 'grafico' ? (
-          <div className="secao-grafico">
-            <h2>Distribuição do Salário</h2>
-            <div className="grafico-pizza" style={estiloPizza}></div>
-
-            <div className="legenda">
-              <div className="item-legenda">
-                <span className="bolinha verde"></span>
-                <span>Livre: R$ {saldoLivre.toFixed(2)}</span>
-              </div>
-              <div className="item-legenda">
-                <span className="bolinha vermelha"></span>
-                <span>Fixas: R$ {totalFixas.toFixed(2)}</span>
-              </div>
-              <div className="item-legenda">
-                <span className="bolinha amarela"></span>
-                <span>Alheias: R$ {totalAlheias.toFixed(2)}</span>
-              </div>
+      {abaAtiva === 'painel' ? (
+        <>
+          {/* Seletor de Mês */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+            <div className="glass-card month-selector">
+              <button className="btn-glass" style={{ padding: '6px 10px' }} onClick={() => mudarMes(-1)}>
+                <ChevronLeft size={18} />
+              </button>
+              <span style={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Calendar size={18} color="#c084fc" /> Mês: {mesAtual}
+              </span>
+              <button className="btn-glass" style={{ padding: '6px 10px' }} onClick={() => mudarMes(1)}>
+                <ChevronRight size={18} />
+              </button>
             </div>
-            <p className="total-salario">
-              Salário Total Cadastrado: <strong>R$ {totalSalario.toFixed(2)}</strong>
-            </p>
+
+            <button className="btn-glass" onClick={() => setEditandoSalario(!editandoSalario)}>
+              Definir Salário Mensal: <strong>{formatarMoeda(resumo.salario)}</strong>
+            </button>
           </div>
-        ) : (
-          <div>
-            <h2 className="titulo-aba">{titulosAba[abaAtiva]}</h2>
-            <form className="formulario" onSubmit={handleSubmit}>
+
+          {editandoSalario && (
+            <form className="glass-card" onSubmit={salvarSalario} style={{ padding: 18, marginBottom: 20, display: 'flex', gap: 12, alignItems: 'center' }}>
               <input
-                type="text"
-                placeholder="Descrição (ex: Salário Mensal, Conta de Luz...)"
-                required
-                value={descricao}
-                onChange={(e) => setDescricao(e.target.value)}
-              />
-              <input
+                className="glass-input"
+                style={{ marginBottom: 0, maxWidth: 240 }}
                 type="number"
                 step="0.01"
-                placeholder="Valor (R$)"
+                placeholder="Salário mensal (R$)"
+                value={novoSalario}
+                onChange={(e) => setNovoSalario(e.target.value)}
                 required
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
               />
-              <input
-                type="date"
-                value={dataTransacao}
-                onChange={(e) => setDataTransacao(e.target.value)}
-              />
-              <button type="submit">
-                {idEditando ? 'Atualizar' : 'Salvar'}
+              <button className="btn-primary" style={{ maxWidth: 180 }} type="submit">
+                Cravar Salário
               </button>
             </form>
+          )}
 
-            <table className="tabela">
-              <thead>
-                <tr>
-                  <th>Descrição</th>
-                  <th>Data</th>
-                  <th>Valor</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transacoesFiltradas.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => iniciarEdicao(t)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <td>{t.descricao}</td>
-                    <td>{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>
-                    <td className={t.tipo === 'salario' ? 'entrada' : 'saida'}>
-                      R$ {parseFloat(t.valor).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Cards de Resumo */}
+          <div className="kpi-grid">
+            <div className="glass-card kpi-card">
+              <div className="kpi-label">Salário Cravado <Wallet size={18} color="#38bdf8" /></div>
+              <div className="kpi-value text-cyan">{formatarMoeda(resumo.salario)}</div>
+            </div>
+
+            <div className="glass-card kpi-card">
+              <div className="kpi-label">Fixas + Variáveis ({mesAtual}) <Trash2 size={18} color="#f87171" /></div>
+              <div className="kpi-value text-red">
+                {formatarMoeda(resumo.total_fixas + resumo.total_variaveis)}
+              </div>
+              <small style={{ color: '#94a3b8' }}>
+                Fixas: {formatarMoeda(resumo.total_fixas)} | Mês: {formatarMoeda(resumo.total_variaveis)}
+              </small>
+            </div>
+
+            <div className="glass-card kpi-card">
+              <div className="kpi-label">Sobra deste Mês <Sparkles size={18} color="#34d399" /></div>
+              <div className="kpi-value text-green">{formatarMoeda(resumo.sobra_mes)}</div>
+            </div>
+
+            <div className="glass-card kpi-card" style={{ borderColor: 'rgba(192, 132, 252, 0.5)' }}>
+              <div className="kpi-label">Total Guardado (Cofre) <PiggyBank size={18} color="#c084fc" /></div>
+              <div className="kpi-value text-purple">{formatarMoeda(resumo.total_guardado)}</div>
+              <small style={{ color: '#94a3b8' }}>Soma acumulada dos meses</small>
+            </div>
           </div>
-        )}
-      </main>
-    </div>
-  )
-}
 
-export default App
+          {/* Gráfico + Lançamentos */}
+          <div className="main-grid">
+            {/* Gráfico de Evolução */}
+            <div className="glass-card section-box">
+              <h3 className="section-title">
+                <TrendingUp size={20} color="#c084fc" /> Evolução do Dinheiro Guardado
+              </h3>
+              <div style={{ width: '100%', height: 310 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={resumo.historico}>
+                    <defs>
+                      <linearGradient id="corCofre" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.75} />
+                        <stop offset="95%" stopColor="#38bdf8" stopOpacity={0.05} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                    <XAxis dataKey="mes" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip
+                      contentStyle={{ background: '#14092a', border: '1px solid #a855f7', borderRadius: 10 }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="guardado_acumulado"
+                      name="Total Guardado (R$)"
+                      stroke="#c084fc"
+                      strokeWidth={3}
+                      fillOpacity={1}
+                      fill="url(#corCofre)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Adicionar e Listar Despesas */}
+            <div className="glass-card section-box">
+              <h3 className="section-title">
+                <PlusCircle size={20} color="#38bdf8" /> Lançar Despesa
+              </h3>
+              <form onSubmit={adicionarDespesa}>
+                <input
+                  className="glass-input"
+                  placeholder="Descrição (Ex: Aluguel, Lanche, Uber)"
+                  value={descricao}
+                  onChange={(e) => setDescricao(e.target.value)}
+                  required
+                />
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <input
+                    className="glass-input"
+                    type="number"
+                    step="0.01"
+                    placeholder="Valor (R$)"
+                    value={valor}
+                    onChange={(e) => setValor(e.target.value)}
+                    required
+                  />
+                  <select
+                    className="glass-select"
+                    value={tipo}
+                    onChange={(e) => setTipo(e.target.value)}
+                  >
+                    <option value="VARIAVEL">Variável (Só {mesAtual})</option>
+                    <option value="FIXA">Fixa (Cravada todo mês)</option>
+                  </select>
+                </div>
+                <button className="btn-primary" type="submit">
+                  Adicionar Despesa
+                </button>
+              </form>
+
+              <ul className="expense-list">
+                {transacoes.map((t) => (
+                  <li key={t.id} className="expense-item">
+                    <div>
+                      <strong>{t.descricao}</strong>
+                      <span className={`badge ${t.tipo === 'FIXA' ? 'badge-fixa' : 'badge-variavel'}`}>
+                        {t.tipo === 'FIXA' ? 'Fixa (Todo mês)' : `Variável (${t.mes_referencia})`}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <span className="text-red" style={{ fontWeight: 600 }}>
+                        - {formatarMoeda(t.valor)}
+                      </span>
+                      <button
+                        onClick={() => removerDespesa(t.id)}
+                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                        title="Remover"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </>
+      ) : (
+        /* ABA MELHORES INVESTIMENTOS (API BANCO CENTRAL) */
+        <div>
+          <div className="glass-card" style={{ padding: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+            <div>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <ShieldCheck color="#34d399" /> Onde Fazer Sua Sobra Render Hoje
+              </h2>
+              <p style={{ color: '#94a3b8', fontSize: '0.92rem' }}>
+                Dados oficiais em tempo real via <strong>{dadosInvestimentos?.fonte || 'Banco Central do Brasil'}</strong>
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div className="glass-card" style={{ padding: '10px 18px', textAlign: 'center' }}>
+                <small style={{ color: '#94a3b8' }}>Taxa Selic Hoje</small>
+                <div className="text-green" style={{ fontWeight: 700, fontSize: '1.2rem' }}>
+                  {dadosInvestimentos?.selic_atual || '11.25'}% a.a.
+                </div>
+              </div>
+              <div className="glass-card" style={{ padding: '10px 18px', textAlign: 'center' }}>
+                <small style={{ color: '#94a3b8' }}>CDI Atual</small>
+                <div className="text-cyan" style={{ fontWeight: 700, fontSize: '1.2rem' }}>
+                  {dadosInvestimentos?.cdi_atual || '11.15'}% a.a.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="invest-grid">
+            {dadosInvestimentos?.investimentos?.map((inv, index) => {
+              const rendimentoEstimadoAno =
+                resumo.total_guardado > 0
+                  ? (resumo.total_guardado * (inv.taxa_anual / 100))
+                  : 0;
+
+              return (
+                <div key={index} className="glass-card invest-card">
+                  <div>
+                    <span className="badge badge-fixa" style={{ marginLeft: 0, marginBottom: 10, display: 'inline-block' }}>
+                      {inv.categoria}
+                    </span>
+                    <h3 style={{ fontSize: '1.2rem', marginBottom: 8 }}>{inv.nome}</h3>
+                    <p className="text-green" style={{ fontWeight: 700, fontSize: '1.05rem', marginBottom: 12 }}>
+                      Rendimento: {inv.rentabilidade}
+                    </p>
+                    <p style={{ color: '#cbd5e1', fontSize: '0.9rem', marginBottom: 6 }}>
+                      <strong>Liquidez:</strong> {inv.liquidez}
+                    </p>
+                    <p style={{ color: '#cbd5e1', fontSize: '0.9rem', marginBottom: 6 }}>
+                      <strong>Segurança:</strong> {inv.risco}
+                    </p>
+                    <p style={{ color: '#94a3b8', fontSize: '0.88rem', marginTop: 10 }}>
+                      <strong>Onde encontrar:</strong> {inv.onde_encontrar}
+                    </p>
+                  </div>
+
+                  {resumo.total_guardado > 0 && (
+                    <div style={{ padding: 12, borderRadius: 10, background: 'rgba(52, 211, 153, 0.1)', border: '1px solid rgba(52, 211, 153, 0.3)' }}>
+                      <small style={{ color: '#a7f3d0' }}>
+                        Seu cofre atual ({formatarMoeda(resumo.total_guardado)}) renderia aprox.{' '}
+                        <strong>+{formatarMoeda(rendimentoEstimadoAno)}/ano</strong> aqui.
+                      </small>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
