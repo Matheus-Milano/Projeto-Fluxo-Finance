@@ -5,13 +5,14 @@ import './App.css'
 const API_URL = 'http://127.0.0.1:8000/api/transacoes/'
 
 function App() {
+  const [idEditando, setIdEditando] = useState(null) // null | id da transação sendo editada
   const [abaAtiva, setAbaAtiva] = useState('grafico') // 'grafico' | 'salario' | 'fixa' | 'alheia'
   const [transacoes, setTransacoes] = useState([])
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [categoria, setCategoria] = useState('')
   const [dataTransacao, setDataTransacao] = useState(
-    new Date().toISOString().slice(0, 16)
+    new Date().toISOString().slice(0, 10)
   )
 
   const carregarTransacoes = async () => {
@@ -27,11 +28,20 @@ function App() {
     carregarTransacoes()
   }, [])
 
+  function iniciarEdicao(t) {
+    setIdEditando(t.id)
+    setDescricao(t.descricao)
+    setValor(t.valor)
+    setCategoria(t.categoria)
+    setDataTransacao(t.data_transacao.slice(0, 10))
+  }
+  
   function trocarAba(novaAba) {
     setAbaAtiva(novaAba)
     setDescricao('')
     setValor('')
     setCategoria('')
+    setIdEditando(null)
   }
 
   function handleSubmit(e) {
@@ -43,6 +53,28 @@ function App() {
       tipo: abaAtiva,
       data_transacao: new Date(dataTransacao).toISOString(),
     }
+
+    if (idEditando) {
+      // Atualizar transação existente
+      axios
+        .put(`${API_URL}${idEditando}/`, novaTransacao)
+        .then(() => {
+          setDescricao('')
+          setValor('')
+          setCategoria('')
+          setIdEditando(null)
+          carregarTransacoes()
+        })
+        .catch((error) => {
+          console.error('Erro ao atualizar transação:', error)
+        })
+    } else {
+      // Criar nova transação
+      salvarTransacao(novaTransacao)
+    }
+  }
+
+  function salvarTransacao(novaTransacao) {
 
     axios
       .post(API_URL, novaTransacao)
@@ -182,7 +214,7 @@ function App() {
                 />
               )}
               <input
-                type="datetime-local"
+                type="date"
                 value={dataTransacao}
                 onChange={(e) => setDataTransacao(e.target.value)}
               />
@@ -200,7 +232,8 @@ function App() {
               </thead>
               <tbody>
                 {transacoesFiltradas.map((t) => (
-                  <tr key={t.id}>
+                  <tr key={t.id} onClick={() => 
+                    iniciarEdicao(t)} style={{ cursor: 'pointer' }}>
                     <td>{t.descricao}</td>
                     <td>{t.categoria}</td>
                     <td>{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>

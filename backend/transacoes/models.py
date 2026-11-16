@@ -11,7 +11,6 @@ class Transacao(models.Model):
     valor = models.DecimalField(max_digits=10, decimal_places=2)
     categoria = models.CharField(max_length=50)
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
-    data = models.DateField(auto_now_add=True)
     data_transacao = models.DateTimeField()
 
     def __str__(self):
