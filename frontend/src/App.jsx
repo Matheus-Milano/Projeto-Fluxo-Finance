@@ -2,86 +2,101 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './App.css'
 
-const API_URL = 'http://127.0.0.1:8000/api/transacoes/'
+const BASE_URL = 'http://127.0.0.1:8000/api'
+const API_TRANSACOES = `${BASE_URL}/transacoes/`
 
 function App() {
-  const [idEditando, setIdEditando] = useState(null) // null | id da transação sendo editada
+  // Estados de Autenticação
+  const [token, setToken] = useState(localStorage.getItem('token') || '')
+  const [nomeUsuario, setNomeUsuario] = useState(localStorage.getItem('nomeUsuario') || '')
+  const [modoCadastro, setModoCadastro] = useState(false)
+  const [nome, setNome] = useState('')
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
+  const [erroAuth, setErroAuth] = useState('')
+
+  // Estados do Fluxo Finance
   const [abaAtiva, setAbaAtiva] = useState('grafico') // 'grafico' | 'salario' | 'fixa' | 'alheia'
   const [transacoes, setTransacoes] = useState([])
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
-  const [categoria, setCategoria] = useState('')
   const [dataTransacao, setDataTransacao] = useState(
     new Date().toISOString().slice(0, 10)
   )
+  const [idEditando, setIdEditando] = useState(null)
+
+  // Configura o cabeçalho Authorization sempre que o token mudar
+  useEffect(() => {
+    if (token) {
+      axios.defaults.headers.common['Authorization'] = `Token ${token}`
+      carregarTransacoes()
+    } else {
+      delete axios.defaults.headers.common['Authorization']
+    }
+  }, [token])
 
   const carregarTransacoes = async () => {
     try {
-      const resposta = await axios.get(API_URL)
+      const resposta = await axios.get(API_TRANSACOES)
       setTransacoes(resposta.data)
     } catch (error) {
       console.error('Erro ao carregar transações:', error)
+      if (error.response && error.response.status === 401) {
+        sairDaConta()
+      }
     }
   }
 
-  useEffect(() => {
-    carregarTransacoes()
-  }, [])
+  async function handleAuth(e) {
+    e.preventDefault()
+    setErroAuth('')
 
-  function iniciarEdicao(t) {
-    setIdEditando(t.id)
-    setDescricao(t.descricao)
-    setValor(t.valor)
-    setCategoria(t.categoria)
-    setDataTransacao(t.data_transacao.slice(0, 10))
+    const endpoint = modoCadastro ? `${BASE_URL}/register/` : `${BASE_URL}/login/`
+    const payload = modoCadastro ? { nome, email, senha } : { email, senha }
+
+    try {
+      const res = await axios.post(endpoint, payload)
+      localStorage.setItem('token', res.data.token)
+      localStorage.setItem('nomeUsuario', res.data.nome || '')
+      setToken(res.data.token)
+      setNomeUsuario(res.data.nome || '')
+      setNome('')
+      setEmail('')
+      setSenha('')
+    } catch (error) {
+      setErroAuth(error.response?.data?.erro || 'Erro ao conectar com o servidor.')
+    }
   }
-  
+
+  function sairDaConta() {
+    localStorage.removeItem('token')
+    localStorage.removeItem('nomeUsuario')
+    setToken('')
+    setNomeUsuario('')
+    setTransacoes([])
+    setAbaAtiva('grafico')
+  }
+
   function trocarAba(novaAba) {
     setAbaAtiva(novaAba)
     setDescricao('')
     setValor('')
-    setCategoria('')
     setIdEditando(null)
   }
 
-  function handleSubmit(e) {
-    e.preventDefault()
-    const novaTransacao = {
-      descricao,
-      valor: parseFloat(valor),
-      categoria: abaAtiva === 'salario' ? 'Renda' : categoria,
-      tipo: abaAtiva,
-      data_transacao: new Date(dataTransacao).toISOString(),
-    }
-
-    if (idEditando) {
-      // Atualizar transação existente
-      axios
-        .put(`${API_URL}${idEditando}/`, novaTransacao)
-        .then(() => {
-          setDescricao('')
-          setValor('')
-          setCategoria('')
-          setIdEditando(null)
-          carregarTransacoes()
-        })
-        .catch((error) => {
-          console.error('Erro ao atualizar transação:', error)
-        })
-    } else {
-      // Criar nova transação
-      salvarTransacao(novaTransacao)
-    }
+  function iniciarEdicao(transacao) {
+    setIdEditando(transacao.id)
+    setDescricao(transacao.descricao)
+    setValor(transacao.valor)
+    setDataTransacao(transacao.data_transacao.slice(0, 10))
   }
 
   function salvarTransacao(novaTransacao) {
-
     axios
-      .post(API_URL, novaTransacao)
+      .post(API_TRANSACOES, novaTransacao)
       .then(() => {
         setDescricao('')
         setValor('')
-        setCategoria('')
         carregarTransacoes()
       })
       .catch((error) => {
@@ -89,7 +104,97 @@ function App() {
       })
   }
 
-  // Cálculos para o Gráfico de Setor
+  function handleSubmit(e) {
+    e.preventDefault()
+    const novaTransacao = {
+      descricao,
+      valor: parseFloat(valor),
+      tipo: abaAtiva,
+      data_transacao: new Date(`${dataTransacao}T12:00:00`).toISOString(),
+    }
+
+    if (idEditando) {
+      axios
+        .put(`${API_TRANSACOES}${idEditando}/`, novaTransacao)
+        .then(() => {
+          setDescricao('')
+          setValor('')
+          setIdEditando(null)
+          carregarTransacoes()
+        })
+        .catch((error) => {
+          console.error('Erro ao atualizar transação:', error)
+        })
+    } else {
+      salvarTransacao(novaTransacao)
+    }
+  }
+
+  // SE NÃO ESTIVER LOGADO: Mostra a tela de Login / Cadastro
+  if (!token) {
+    return (
+      <div className="container">
+        <h1>Fluxo Finance</h1>
+
+        <main className="painel-principal" style={{ maxWidth: '400px', margin: '0 auto' }}>
+          <h2 className="titulo-aba">
+            {modoCadastro ? 'Criar Nova Conta' : 'Acessar Minha Conta'}
+          </h2>
+
+          <form className="formulario" onSubmit={handleAuth}>
+            {modoCadastro && (
+              <input
+                type="text"
+                placeholder="Seu Nome"
+                required
+                value={nome}
+                onChange={(e) => setNome(e.target.value)}
+              />
+            )}
+            <input
+              type="email"
+              placeholder="Seu E-mail"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Sua Senha"
+              required
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+            />
+
+            {erroAuth && (
+              <p style={{ color: '#f87171', fontSize: '0.9rem', margin: '4px 0' }}>
+                {erroAuth}
+              </p>
+            )}
+
+            <button type="submit">
+              {modoCadastro ? 'Cadastrar e Entrar' : 'Entrar'}
+            </button>
+          </form>
+
+          <p style={{ marginTop: '16px', fontSize: '0.9rem', color: '#94a3b8' }}>
+            {modoCadastro ? 'Já tem uma conta?' : 'Ainda não tem conta?'}{' '}
+            <span
+              onClick={() => {
+                setModoCadastro(!modoCadastro)
+                setErroAuth('')
+              }}
+              style={{ color: '#38bdf8', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              {modoCadastro ? 'Fazer Login' : 'Criar Conta'}
+            </span>
+          </p>
+        </main>
+      </div>
+    )
+  }
+
+  // SE ESTIVER LOGADO: Mostra o painel normal do usuário
   const totalSalario = transacoes
     .filter((t) => t.tipo === 'salario')
     .reduce((acc, t) => acc + parseFloat(t.valor), 0)
@@ -104,7 +209,6 @@ function App() {
 
   const saldoLivre = Math.max(totalSalario - totalFixas - totalAlheias, 0)
 
-  // Porcentagens em graus (0 a 360) para o gráfico
   const base = totalSalario > 0 ? totalSalario : 1
   const grausFixas = Math.min((totalFixas / base) * 360, 360)
   const grausAlheias = Math.min((totalAlheias / base) * 360, 360 - grausFixas)
@@ -130,9 +234,27 @@ function App() {
 
   return (
     <div className="container">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <span style={{ color: '#94a3b8', fontSize: '0.95rem' }}>
+          Olá, <strong>{nomeUsuario || 'Usuário'}</strong>
+        </span>
+        <button
+          onClick={sairDaConta}
+          style={{
+            background: 'transparent',
+            border: '1px solid #475569',
+            color: '#cbd5e1',
+            padding: '6px 14px',
+            borderRadius: '8px',
+            cursor: 'pointer',
+          }}
+        >
+          Sair
+        </button>
+      </div>
+
       <h1>Fluxo Finance</h1>
 
-      {/* Barra Superior (traços vermelhos do seu wireframe) */}
       <nav className="menu-topo">
         <button
           className={abaAtiva === 'grafico' ? 'ativo' : ''}
@@ -160,7 +282,6 @@ function App() {
         </button>
       </nav>
 
-      {/* Área Principal (parte cinza do seu wireframe) */}
       <main className="painel-principal">
         {abaAtiva === 'grafico' ? (
           <div className="secao-grafico">
@@ -204,38 +325,32 @@ function App() {
                 value={valor}
                 onChange={(e) => setValor(e.target.value)}
               />
-              {abaAtiva !== 'salario' && (
-                <input
-                  type="text"
-                  placeholder="Categoria (ex: Moradia, Lazer...)"
-                  required
-                  value={categoria}
-                  onChange={(e) => setCategoria(e.target.value)}
-                />
-              )}
               <input
                 type="date"
                 value={dataTransacao}
                 onChange={(e) => setDataTransacao(e.target.value)}
               />
-              <button type="submit">Salvar</button>
+              <button type="submit">
+                {idEditando ? 'Atualizar' : 'Salvar'}
+              </button>
             </form>
 
             <table className="tabela">
               <thead>
                 <tr>
                   <th>Descrição</th>
-                  <th>Categoria</th>
                   <th>Data</th>
                   <th>Valor</th>
                 </tr>
               </thead>
               <tbody>
                 {transacoesFiltradas.map((t) => (
-                  <tr key={t.id} onClick={() => 
-                    iniciarEdicao(t)} style={{ cursor: 'pointer' }}>
+                  <tr
+                    key={t.id}
+                    onClick={() => iniciarEdicao(t)}
+                    style={{ cursor: 'pointer' }}
+                  >
                     <td>{t.descricao}</td>
-                    <td>{t.categoria}</td>
                     <td>{new Date(t.data_transacao).toLocaleDateString('pt-BR')}</td>
                     <td className={t.tipo === 'salario' ? 'entrada' : 'saida'}>
                       R$ {parseFloat(t.valor).toFixed(2)}

@@ -1,4 +1,5 @@
 from django.db import models
+from django.contrib.auth.models import User
 
 class Transacao(models.Model):
     TIPO_CHOICES = [
@@ -7,9 +8,9 @@ class Transacao(models.Model):
         ('alheia', 'Despesa Alheia'),
     ]
 
+    usuario = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
     descricao = models.CharField(max_length=100)
     valor = models.DecimalField(max_digits=10, decimal_places=2)
-    categoria = models.CharField(max_length=50)
     tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
     data_transacao = models.DateTimeField()
 

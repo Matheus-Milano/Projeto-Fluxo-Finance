@@ -1,0 +1,1 @@
+SELECT * FROM fluxo_finance.transacoes_transacao;

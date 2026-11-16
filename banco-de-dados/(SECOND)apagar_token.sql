@@ -1,0 +1,1 @@
+DELETE FROM fluxo_finance.authtoken_token;

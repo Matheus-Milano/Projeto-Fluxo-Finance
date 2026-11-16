@@ -44,6 +44,7 @@ INSTALLED_APPS = [
 
     # Bibliotecas instaladas
     'rest_framework',
+    'rest_framework.authtoken',
     'corsheaders',
     # Seu app
     'transacoes',
@@ -150,3 +151,9 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+}
