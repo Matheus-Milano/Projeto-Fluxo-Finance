@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './App.css'
 
-const BASE_URL = 'http://127.0.0.1:8000/api'
+const BASE_URL = 'https://fluxo-finance-api.onrender.com/api'
 const API_TRANSACOES = `${BASE_URL}/transacoes/`
 
 function App() {
