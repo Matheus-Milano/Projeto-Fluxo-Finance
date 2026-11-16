@@ -1,12 +1,20 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import TransacaoViewSet, registrar_usuario, login_usuario
-
-router = DefaultRouter()
-router.register(r'transacoes', TransacaoViewSet, basename='transacao')
+from django.urls import path
+from .views import (
+    RegisterView,
+    LoginView,
+    TransacaoListCreate,
+    TransacaoDetail,
+    PerfilSalarioView,
+    ResumoMensalView,
+    MelhoresInvestimentosView,
+)
 
 urlpatterns = [
-    path('', include(router.urls)),
-    path('register/', registrar_usuario),
-    path('login/', login_usuario),
+    path('register/', RegisterView.as_view(), name='register'),
+    path('login/', LoginView.as_view(), name='login'),
+    path('transacoes/', TransacaoListCreate.as_view(), name='transacoes'),
+    path('transacoes/<int:pk>/', TransacaoDetail.as_view(), name='transacao-detail'),
+    path('perfil/salario/', PerfilSalarioView.as_view(), name='perfil-salario'),
+    path('resumo/', ResumoMensalView.as_view(), name='resumo-mensal'),
+    path('investimentos/', MelhoresInvestimentosView.as_view(), name='investimentos'),
 ]
